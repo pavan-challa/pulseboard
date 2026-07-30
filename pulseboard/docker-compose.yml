@@ -1,0 +1,38 @@
+# Local integration testing: `docker compose up --build` gets you the full
+# backend + MySQL stack running exactly like production, without installing
+# MySQL on your machine. Not used for the Railway/Vercel deploy itself -
+# Railway builds the Dockerfile directly and provides its own MySQL instance.
+services:
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: changeme
+      MYSQL_DATABASE: pulseboard
+    # No "ports:" mapping to the host on purpose - the backend service reaches
+    # this container over Docker's internal network using the hostname "mysql"
+    # (see SPRING_DATASOURCE_URL below), so nothing on your host machine needs
+    # a port here. This sidesteps port conflicts with any local MySQL install
+    # entirely. If you ever want to inspect the DB from a host GUI tool, run
+    # `docker compose exec mysql mysql -uroot -pchangeme pulseboard` instead.
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pchangeme"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/pulseboard?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: changeme
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql-data:
